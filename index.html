@@ -107,6 +107,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 .timer i{display:block;height:100%;width:100%;transform-origin:left center;transform:scaleX(0);background:var(--muted);animation-name:tfill;animation-timing-function:linear;animation-fill-mode:forwards}
 .paused .timer i{animation-play-state:paused}
 @keyframes tfill{0%{transform:scaleX(0);background:var(--muted)}99.5%{background:var(--muted)}100%{transform:scaleX(1);background:var(--warn)}}
+.seg.modes{margin:0 0 14px}
+.lru{color:var(--muted);font-size:15px;margin:2px 0 0}
 .cheat{margin:0 0 14px}
 .cheat p{margin:10px 0 0;font-size:14.5px;line-height:1.5;color:var(--text)}
 .cheat .lead{color:var(--muted);margin-top:4px}
@@ -1713,7 +1715,7 @@ function updateStat(){
 }
 
 /* ============ STATE ============ */
-const state={tab:'cards', sess:null, trap:null, form:{group:'vm',q:null,picked:null,score:0,n:0}, q:'', talk:{order:null,i:0,words:false,sample:false}, cheat:false, syncOpen:false, syncPaste:false, syncShow:''};
+const state={tab:'cards', sess:null, trap:null, form:{group:'vm',q:null,picked:null,score:0,n:0}, fmode:'now', aor:{group:'all',q:null,picked:null,score:0,n:0}, q:'', talk:{order:null,i:0,words:false,sample:false}, cheat:false, syncOpen:false, syncPaste:false, syncShow:''};
 
 /* ============ CARDS ============ */
 function available(){return ITEMS.filter(i=>settings.kind==='all'||i.type===settings.kind);}
@@ -1995,6 +1997,92 @@ function newFormQ(){
   const others=shuffle([...new Set(v.f.filter((x,i)=>i!==idx))]).slice(0,3);
   f.q={v,idx,opts:shuffle([v.f[idx],...others])}; f.picked=null;
 }
+
+/* ============ АОРИСТ: подставить форму прошедшего ============ */
+const AOR=[
+ {p:'αγοράζω',ru:'покупать',k:'-σα',f:['αγόρασα','αγόρασες','αγόρασε','αγοράσαμε','αγοράσατε','αγόρασαν']},
+ {p:'διαβάζω',ru:'читать',k:'-σα',f:['διάβασα','διάβασες','διάβασε','διαβάσαμε','διαβάσατε','διάβασαν']},
+ {p:'καθαρίζω',ru:'убирать',k:'-σα',f:['καθάρισα','καθάρισες','καθάρισε','καθαρίσαμε','καθαρίσατε','καθάρισαν']},
+ {p:'πληρώνω',ru:'платить',k:'-σα',f:['πλήρωσα','πλήρωσες','πλήρωσε','πληρώσαμε','πληρώσατε','πλήρωσαν']},
+ {p:'γιορτάζω',ru:'праздновать',k:'-σα',f:['γιόρτασα','γιόρτασες','γιόρτασε','γιορτάσαμε','γιορτάσατε','γιόρτασαν']},
+ {p:'αποφασίζω',ru:'решать',k:'-σα',f:['αποφάσισα','αποφάσισες','αποφάσισε','αποφασίσαμε','αποφασίσατε','αποφάσισαν']},
+ {p:'γυρίζω',ru:'возвращаться',k:'-σα',f:['γύρισα','γύρισες','γύρισε','γυρίσαμε','γυρίσατε','γύρισαν']},
+ {p:'φτάνω',ru:'приезжать',k:'-σα',f:['έφτασα','έφτασες','έφτασε','φτάσαμε','φτάσατε','έφτασαν']},
+ {p:'κλείνω',ru:'закрывать',k:'-σα',f:['έκλεισα','έκλεισες','έκλεισε','κλείσαμε','κλείσατε','έκλεισαν']},
+ {p:'ανοίγω',ru:'открывать',k:'-ξα',f:['άνοιξα','άνοιξες','άνοιξε','ανοίξαμε','ανοίξατε','άνοιξαν']},
+ {p:'αλλάζω',ru:'менять',k:'-ξα',f:['άλλαξα','άλλαξες','άλλαξε','αλλάξαμε','αλλάξατε','άλλαξαν']},
+ {p:'παίζω',ru:'играть',k:'-ξα',f:['έπαιξα','έπαιξες','έπαιξε','παίξαμε','παίξατε','έπαιξαν']},
+ {p:'τρέχω',ru:'бежать',k:'-ξα',f:['έτρεξα','έτρεξες','έτρεξε','τρέξαμε','τρέξατε','έτρεξαν']},
+ {p:'ψάχνω',ru:'искать',k:'-ξα',f:['έψαξα','έψαξες','έψαξε','ψάξαμε','ψάξατε','έψαξαν']},
+ {p:'φτιάχνω',ru:'делать, чинить',k:'-ξα',f:['έφτιαξα','έφτιαξες','έφτιαξε','φτιάξαμε','φτιάξατε','έφτιαξαν']},
+ {p:'προσέχω',ru:'быть внимательным',k:'-ξα',f:['πρόσεξα','πρόσεξες','πρόσεξε','προσέξαμε','προσέξατε','πρόσεξαν']},
+ {p:'κοιτάζω',ru:'смотреть',k:'-ξα',f:['κοίταξα','κοίταξες','κοίταξε','κοιτάξαμε','κοιτάξατε','κοίταξαν']},
+ {p:'φωνάζω',ru:'кричать, звать',k:'-ξα',f:['φώναξα','φώναξες','φώναξε','φωνάξαμε','φωνάξατε','φώναξαν']},
+ {p:'δουλεύω',ru:'работать',k:'-ψα',f:['δούλεψα','δούλεψες','δούλεψε','δουλέψαμε','δουλέψατε','δούλεψαν']},
+ {p:'ταξιδεύω',ru:'путешествовать',k:'-ψα',f:['ταξίδεψα','ταξίδεψες','ταξίδεψε','ταξιδέψαμε','ταξιδέψατε','ταξίδεψαν']},
+ {p:'μαγειρεύω',ru:'готовить',k:'-ψα',f:['μαγείρεψα','μαγείρεψες','μαγείρεψε','μαγειρέψαμε','μαγειρέψατε','μαγείρεψαν']},
+ {p:'χορεύω',ru:'танцевать',k:'-ψα',f:['χόρεψα','χόρεψες','χόρεψε','χορέψαμε','χορέψατε','χόρεψαν']},
+ {p:'γράφω',ru:'писать',k:'-ψα',f:['έγραψα','έγραψες','έγραψε','γράψαμε','γράψατε','έγραψαν']},
+ {p:'ανάβω',ru:'включать',k:'-ψα',f:['άναψα','άναψες','άναψε','ανάψαμε','ανάψατε','άναψαν']},
+ {p:'λείπω',ru:'отсутствовать',k:'-ψα',f:['έλειψα','έλειψες','έλειψε','λείψαμε','λείψατε','έλειψαν']},
+ {p:'κόβω',ru:'резать',k:'-ψα',f:['έκοψα','έκοψες','έκοψε','κόψαμε','κόψατε','έκοψαν']},
+ {p:'τηλεφωνώ',ru:'звонить',k:'-ησα',f:['τηλεφώνησα','τηλεφώνησες','τηλεφώνησε','τηλεφωνήσαμε','τηλεφωνήσατε','τηλεφώνησαν']},
+ {p:'απαντάω',ru:'отвечать',k:'-ησα',f:['απάντησα','απάντησες','απάντησε','απαντήσαμε','απαντήσατε','απάντησαν']},
+ {p:'μιλάω',ru:'говорить',k:'-ησα',f:['μίλησα','μίλησες','μίλησε','μιλήσαμε','μιλήσατε','μίλησαν']},
+ {p:'βλέπω',ru:'видеть',k:'особые',f:['είδα','είδες','είδε','είδαμε','είδατε','είδαν']},
+ {p:'τρώω',ru:'есть',k:'особые',f:['έφαγα','έφαγες','έφαγε','φάγαμε','φάγατε','έφαγαν']},
+ {p:'πίνω',ru:'пить',k:'особые',f:['ήπια','ήπιες','ήπιε','ήπιαμε','ήπιατε','ήπιαν']},
+ {p:'πάω',ru:'идти, ехать',k:'особые',f:['πήγα','πήγες','πήγε','πήγαμε','πήγατε','πήγαν']},
+ {p:'έρχομαι',ru:'приходить',k:'особые',f:['ήρθα','ήρθες','ήρθε','ήρθαμε','ήρθατε','ήρθαν']},
+ {p:'λέω',ru:'говорить, сказать',k:'особые',f:['είπα','είπες','είπε','είπαμε','είπατε','είπαν']},
+ {p:'έχω',ru:'иметь',k:'особые',f:['είχα','είχες','είχε','είχαμε','είχατε','είχαν']},
+ {p:'είμαι',ru:'быть',k:'особые',f:['ήμουν','ήσουν','ήταν','ήμασταν','ήσασταν','ήταν']},
+ {p:'βρίσκω',ru:'находить',k:'особые',f:['βρήκα','βρήκες','βρήκε','βρήκαμε','βρήκατε','βρήκαν']},
+ {p:'δίνω',ru:'давать',k:'особые',f:['έδωσα','έδωσες','έδωσε','δώσαμε','δώσατε','έδωσαν']},
+ {p:'κάνω',ru:'делать',k:'особые',f:['έκανα','έκανες','έκανε','κάναμε','κάνατε','έκαναν']},
+ {p:'γίνομαι',ru:'становиться',k:'особые',f:['έγινα','έγινες','έγινε','γίναμε','γίνατε','έγιναν']}
+];
+/* подменяем показатель аориста, чтобы получить правдоподобный неверный вариант */
+function swapMark(form){
+  const m=form.match(/^(.*)(σ|ξ|ψ)(α|ες|ε|αμε|ατε|αν)$/);
+  if(!m)return null;
+  const other=['σ','ξ','ψ'].filter(x=>x!==m[2]);
+  return m[1]+other[Math.floor(Math.random()*other.length)]+m[3];
+}
+function newAorQ(){
+  const a=state.aor;
+  const list=AOR.filter(v=>a.group==='all'||v.k===a.group);
+  const v=list[Math.floor(Math.random()*list.length)];
+  const idx=Math.floor(Math.random()*6);
+  const right=v.f[idx];
+  const opts=new Set([right]);
+  const wrong=swapMark(right); if(wrong)opts.add(wrong);
+  shuffle(v.f.filter(x=>x!==right)).forEach(x=>{if(opts.size<4)opts.add(x);});
+  a.q={v,idx,opts:shuffle([...opts])}; a.picked=null;
+}
+function renderAor(){
+  const a=state.aor;
+  if(!a.q)newAorQ();
+  const {v,idx,opts}=a.q; const answered=a.picked!==null; const right=v.f[idx];
+  const groups=[['all','Все'],['-σα','-σα'],['-ξα','-ξα'],['-ψα','-ψα'],['особые','особые']];
+  const seg=`<div class="seg" role="group">${groups.map(([k,l])=>`<button data-act="agroup" data-v="${k}" class="${a.group===k?'on':''}">${l}</button>`).join('')}</div>`;
+  return `<p class="intro">Дан глагол настоящего времени и лицо. Выбери форму аориста: и согласную, и окончание.</p>
+  <div class="field"><div class="flabel">Группа</div>${seg}</div>
+  <div class="score"><span>Ответов: ${a.n}</span><span>Верно: ${a.score}</span></div>
+  <article class="page">
+    <p class="lab">Какой аорист?</p>
+    <p class="pron">${esc(PRON[idx])}</p>
+    <p class="lemma"><span class="g">${esc(v.p)}</span> <span class="tag">${esc(v.k)}</span></p>
+    <p class="lru">${esc(v.ru)}</p>
+    <div class="opts">${opts.map(o=>{
+      let cls='opt';
+      if(answered){ if(o===right)cls+=' ok'; else if(o===a.picked)cls+=' bad'; }
+      return `<button class="${cls}" data-act="aor-pick" data-v="${esc(o)}" ${answered?'disabled':''}>${esc(o)}</button>`;}).join('')}</div>
+    ${answered?`<div class="ans"><p class="ctxhead">Весь аорист</p><ul class="ctx">${v.f.map((x,i)=>`<li><span><span class="g">${esc(x)}</span> <span class="r">${esc(PRON[i])}</span></span></li>`).join('')}</ul></div>`:''}
+  </article>
+  ${answered?'<button class="primary" data-act="aor-next">Дальше</button>':''}`;
+}
+
 /* Шпаргалка по аористу: компактно, чтобы переписать на разворот тетради */
 function cheatHTML(){
   const row=(a,b)=>`<tr><td>${a}</td><td>${b}</td></tr>`;
@@ -2039,12 +2127,14 @@ function cheatHTML(){
 
 function renderForms(){
   const f=state.form;
-  const cheat=cheatHTML(); if(!f.q)newFormQ();
+  const cheat=cheatHTML();
+  const modes=`<div class="seg modes" role="group">${[['now','Настоящее'],['aor','Аорист']].map(([k,l])=>`<button data-act="fmode" data-v="${k}" class="${state.fmode===k?'on':''}">${l}</button>`).join('')}</div>`;
+  if(state.fmode==='aor')return modes+cheat+renderAor(); if(!f.q)newFormQ();
   const {v,idx,opts}=f.q; const answered=f.picked!==null; const right=v.f[idx];
   const seg=`<div class="seg" role="group">${[['vm','-ομαι / -άμαι'],['va','-ω'],['vo','-ώ / -άω'],['all','Все']].map(([k,l])=>`<button data-act="fgroup" data-v="${k}" class="${f.group===k?'on':''}">${l}</button>`).join('')}</div>`;
   const endKeys=f.group==='all'?['vm','va','vo']:[f.group];
   const ends=`<details class="endings"><summary>Окончания</summary><div class="endgrid">${endKeys.flatMap(k=>ENDINGS[k]).map(([h,p])=>`<div><h4>${h}</h4><p>${p}</p></div>`).join('')}</div></details>`;
-  return `${cheat}<p class="intro">Выбери правильную форму глагола. После ответа увидишь всё спряжение.</p>
+  return `${modes}<p class="intro">Выбери правильную форму глагола. После ответа увидишь всё спряжение.</p>
   <div class="field">${seg}</div>${ends}
   <div class="score"><span>Ответов: ${f.n}</span><span>Верно: ${f.score}</span></div>
   <article class="page">
@@ -2246,6 +2336,10 @@ function handle(b){
     case 'talk-sample': state.talk.sample=true; render(); break;
     case 'talk-next': { const t=state.talk; t.i++; t.words=false; t.sample=false; render(); break; }
     case 'talk-restart': state.talk={order:null,i:0,words:false,sample:false}; render(); break;
+    case 'fmode': state.fmode=b.dataset.v; render(); break;
+    case 'agroup': { const a=state.aor; if(a.group!==b.dataset.v){a.group=b.dataset.v; a.q=null; a.picked=null;} render(); break; }
+    case 'aor-pick': { const a=state.aor; if(a.picked!==null)break; a.picked=b.dataset.v; a.n++; if(a.picked===a.q.v.f[a.q.idx])a.score++; render(); break; }
+    case 'aor-next': newAorQ(); render(); break;
     case 'exp-save': saveFile(); break;
     case 'exp-load': document.getElementById('syncfile').click(); break;
     case 'exp-copy': copyCode(); break;
